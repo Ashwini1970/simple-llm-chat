@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Chatbot</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1c1917;
+      --muted: #57534e;
+      --line: #e7e5e4;
+      --paper: #fafaf9;
+      --user: #1d4ed8;
+      --bot: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+    }
+    main {
+      max-width: 760px;
+      margin: 0 auto;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 16px 16px;
+    }
+    h1 { margin: 0 0 4px; font-size: 1.4rem; }
+    p.hint { margin: 0 0 16px; color: var(--muted); }
+    #log {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding-bottom: 12px;
+    }
+    .msg {
+      max-width: 85%;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+    .user { align-self: flex-end; background: var(--user); color: white; border-color: transparent; }
+    .assistant { align-self: flex-start; background: var(--bot); }
+    .error { align-self: stretch; background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+    form { display: flex; gap: 8px; }
+    textarea {
+      flex: 1;
+      resize: none;
+      min-height: 52px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      font: inherit;
+    }
+    button {
+      padding: 0 16px;
+      border: 0;
+      border-radius: 10px;
+      background: var(--ink);
+      color: white;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.6; cursor: wait; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Chatbot</h1>
+    <p class="hint">Each message is sent to the LLM. The reply is added to the conversation.</p>
+    <div id="log"></div>
+    <form id="composer">
+      <textarea id="input" placeholder="Type a message" required></textarea>
+      <button id="send" type="submit">Send</button>
+    </form>
+  </main>
+  <script>
+    const log = document.getElementById("log");
+    const form = document.getElementById("composer");
+    const input = document.getElementById("input");
+    const send = document.getElementById("send");
+    const messages = [];
+
+    function addBubble(role, text) {
+      const item = document.createElement("div");
+      item.className = "msg " + role;
+      item.textContent = text;
+      log.appendChild(item);
+      log.scrollTop = log.scrollHeight;
+      return item;
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      messages.push({ role: "user", content: text });
+      addBubble("user", text);
+      send.disabled = true;
+      const pending = addBubble("assistant", "Waiting for the model...");
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ messages }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Request failed");
+        messages.push({ role: "assistant", content: data.reply });
+        pending.textContent = data.reply;
+      } catch (error) {
+        messages.pop();
+        pending.className = "msg error";
+        pending.textContent = error.message;
+      } finally {
+        send.disabled = false;
+        input.focus();
+      }
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+  </script>
+</body>
+</html>
